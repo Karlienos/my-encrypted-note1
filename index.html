@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>加密记事本</title>
-    <!-- Tailwind + Toast UI Editor CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://uicdn.toast.com/editor/latest/toastui-editor-all.min.js"></script>
     <link rel="stylesheet" href="https://uicdn.toast.com/editor/latest/toastui-editor.min.css">
@@ -12,11 +11,12 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
         body { font-family: 'Inter', system-ui, sans-serif; }
-        .toastui-editor-main-container { background: #18181b; }
+        .toastui-editor-main-container { background: #18181b !important; color: #f1f1f1; }
+        .toastui-editor-contents { background: #18181b !important; }
     </style>
 </head>
 <body class="bg-zinc-950 text-zinc-100 min-h-screen">
-    <!-- 密码屏（绝不显示明文密码） -->
+    <!-- 密码屏 -->
     <div id="password-screen" class="min-h-screen flex items-center justify-center bg-zinc-950">
         <div class="max-w-md w-full mx-4 bg-zinc-900 rounded-3xl shadow-2xl p-10">
             <div class="flex justify-center mb-6">
@@ -35,7 +35,7 @@
         </div>
     </div>
 
-    <!-- 记事本主界面 -->
+    <!-- 主界面 -->
     <div id="notepad" class="hidden min-h-screen flex flex-col">
         <div class="bg-zinc-900 border-b border-zinc-800 px-6 py-4 flex items-center justify-between">
             <div class="flex items-center gap-3">
@@ -43,10 +43,9 @@
                 <h2 class="text-2xl font-semibold">我的加密笔记</h2>
             </div>
             <div class="flex items-center gap-4">
-                <button onclick="toggleSourceModal()" 
+                <button onclick="toggleMode()" id="mode-btn"
                         class="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-5 py-2 rounded-2xl text-sm font-medium transition-all">
-                    <span>📄</span>
-                    <span>源文本</span>
+                    📄 源文本
                 </button>
                 <div id="status" class="text-emerald-400 text-sm flex items-center gap-2">
                     <span class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>
@@ -59,26 +58,11 @@
         <div id="editor" class="flex-1 p-6 bg-zinc-950"></div>
     </div>
 
-    <!-- 浮动源码窗口 -->
-    <div id="source-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-        <div class="bg-zinc-900 rounded-3xl shadow-2xl w-full max-w-4xl mx-4 overflow-hidden">
-            <div class="px-6 py-4 border-b border-zinc-700 flex items-center justify-between">
-                <h3 class="font-semibold text-lg">源文本模式（Markdown）</h3>
-                <div class="flex gap-3">
-                    <button onclick="closeSourceModal()" 
-                            class="px-6 py-2 text-zinc-400 hover:text-zinc-200">取消</button>
-                    <button onclick="saveSourceModal()" 
-                            class="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-2 rounded-2xl">保存并同步</button>
-                </div>
-            </div>
-            <textarea id="source-textarea" class="w-full h-96 bg-zinc-950 p-6 text-zinc-100 font-mono text-base outline-none resize-none"></textarea>
-        </div>
-    </div>
-
     <script>
         const correctHash = "736963664b49ebe36459910f2c9171204f4914610a6c9ab6b19bc6df11bcd0c2";
         let currentPassword = '';
         let editorInstance = null;
+        let currentMode = 'wysiwyg'; // 默认富文本模式
         let saveTimeout = null;
 
         async function sha256(message) {
@@ -116,7 +100,7 @@
             editorInstance = new toastui.Editor({
                 el: document.getElementById('editor'),
                 height: '100%',
-                initialEditType: 'wysiwyg',
+                initialEditType: 'wysiwyg',   // 默认富文本模式，可直接编辑
                 previewStyle: 'none',
                 initialValue: initialMarkdown,
                 usageStatistics: false,
@@ -127,10 +111,7 @@
                 ]
             });
 
-            // 实时自动保存（Markdown 源码）
-            editorInstance.on('change', () => {
-                autoSave();
-            });
+            editorInstance.on('change', autoSave);
         }
 
         function autoSave() {
@@ -148,30 +129,19 @@
             }, 600);
         }
 
-        // 打开浮动源码窗口
-        function toggleSourceModal() {
+        // 切换整个编辑区模式（富文本 ↔ Markdown源码）
+        function toggleMode() {
             if (!editorInstance) return;
-            const markdown = editorInstance.getMarkdown();
-            document.getElementById('source-textarea').value = markdown;
-            document.getElementById('source-modal').classList.remove('hidden');
+            if (currentMode === 'wysiwyg') {
+                editorInstance.changeMode('markdown');
+                currentMode = 'markdown';
+                document.getElementById('mode-btn').innerHTML = `📝 富文本模式`;
+            } else {
+                editorInstance.changeMode('wysiwyg');
+                currentMode = 'wysiwyg';
+                document.getElementById('mode-btn').innerHTML = `📄 源文本`;
+            }
         }
-
-        function closeSourceModal() {
-            document.getElementById('source-modal').classList.add('hidden');
-        }
-
-        function saveSourceModal() {
-            if (!editorInstance) return;
-            const newMarkdown = document.getElementById('source-textarea').value;
-            editorInstance.setMarkdown(newMarkdown);
-            closeSourceModal();
-            autoSave(); // 立即保存
-        }
-
-        // 回车确认密码
-        document.getElementById('passInput').addEventListener('keypress', e => {
-            if (e.key === 'Enter') checkPassword();
-        });
     </script>
 </body>
 </html>
