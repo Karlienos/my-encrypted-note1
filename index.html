@@ -4,28 +4,29 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>加密记事本</title>
+    <!-- Tailwind + Toast UI Editor CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://uicdn.toast.com/editor/latest/toastui-editor-all.min.js"></script>
+    <link rel="stylesheet" href="https://uicdn.toast.com/editor/latest/toastui-editor.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/14.1.4/marked.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
         body { font-family: 'Inter', system-ui, sans-serif; }
-        .markdown-preview { line-height: 1.7; }
-        .markdown-preview h1, .markdown-preview h2 { border-bottom: 1px solid #374151; padding-bottom: 0.3em; }
+        .toastui-editor-main-container { background: #18181b; }
     </style>
 </head>
 <body class="bg-zinc-950 text-zinc-100 min-h-screen">
-    <!-- 密码屏 -->
-    <div id="password-screen" class="min-h-screen flex items-center justify-center">
+    <!-- 密码屏（绝不显示明文密码） -->
+    <div id="password-screen" class="min-h-screen flex items-center justify-center bg-zinc-950">
         <div class="max-w-md w-full mx-4 bg-zinc-900 rounded-3xl shadow-2xl p-10">
             <div class="flex justify-center mb-6">
                 <div class="w-16 h-16 bg-emerald-500 rounded-2xl flex items-center justify-center text-3xl">🔐</div>
             </div>
             <h1 class="text-3xl font-semibold text-center mb-2">加密记事本</h1>
-            <p class="text-zinc-400 text-center mb-8">输入密码后开始安全记录</p>
+            <p class="text-zinc-400 text-center mb-8">输入密码继续</p>
             <input type="password" id="passInput" 
                    class="w-full bg-zinc-800 border border-zinc-700 focus:border-emerald-500 rounded-2xl px-6 py-4 text-lg outline-none transition-all"
-                   placeholder="输入密码 Karlienos" autocomplete="off">
+                   placeholder="输入密码" autocomplete="off">
             <button onclick="checkPassword()" 
                     class="mt-6 w-full bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-4 rounded-2xl text-lg transition-all">
                 进入记事本
@@ -41,35 +42,43 @@
                 <div class="w-9 h-9 bg-emerald-500 rounded-2xl flex items-center justify-center text-xl">📝</div>
                 <h2 class="text-2xl font-semibold">我的加密笔记</h2>
             </div>
-            <div id="status" class="text-emerald-400 text-sm flex items-center gap-2">
-                <span class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>
-                已自动加密保存
+            <div class="flex items-center gap-4">
+                <button onclick="toggleSourceModal()" 
+                        class="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-5 py-2 rounded-2xl text-sm font-medium transition-all">
+                    <span>📄</span>
+                    <span>源文本</span>
+                </button>
+                <div id="status" class="text-emerald-400 text-sm flex items-center gap-2">
+                    <span class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>
+                    已自动加密保存
+                </div>
             </div>
         </div>
         
-        <div class="flex flex-1 overflow-hidden">
-            <!-- 编辑区 -->
-            <div class="flex-1 flex flex-col border-r border-zinc-800">
-                <div class="px-6 py-3 bg-zinc-900 border-b border-zinc-800 text-zinc-400 text-sm font-medium flex items-center">
-                    <span>Markdown 编辑</span>
-                    <span class="ml-auto text-xs bg-zinc-800 px-3 py-1 rounded-xl">所见即所得预览</span>
+        <!-- 编辑器容器 -->
+        <div id="editor" class="flex-1 p-6 bg-zinc-950"></div>
+    </div>
+
+    <!-- 浮动源码窗口 -->
+    <div id="source-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+        <div class="bg-zinc-900 rounded-3xl shadow-2xl w-full max-w-4xl mx-4 overflow-hidden">
+            <div class="px-6 py-4 border-b border-zinc-700 flex items-center justify-between">
+                <h3 class="font-semibold text-lg">源文本模式（Markdown）</h3>
+                <div class="flex gap-3">
+                    <button onclick="closeSourceModal()" 
+                            class="px-6 py-2 text-zinc-400 hover:text-zinc-200">取消</button>
+                    <button onclick="saveSourceModal()" 
+                            class="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-2 rounded-2xl">保存并同步</button>
                 </div>
-                <textarea id="noteText" 
-                          class="flex-1 bg-zinc-950 p-6 text-lg resize-none outline-none font-light leading-relaxed"
-                          placeholder="在这里用 Markdown 写笔记...&#10;支持 # 标题、**加粗**、- 列表、[链接](url) 等"></textarea>
             </div>
-            
-            <!-- 实时预览区 -->
-            <div class="flex-1 flex flex-col bg-zinc-900 overflow-auto">
-                <div class="px-6 py-3 bg-zinc-900 border-b border-zinc-800 text-zinc-400 text-sm font-medium">实时预览</div>
-                <div id="preview" class="markdown-preview flex-1 p-8 prose prose-invert max-w-none overflow-auto"></div>
-            </div>
+            <textarea id="source-textarea" class="w-full h-96 bg-zinc-950 p-6 text-zinc-100 font-mono text-base outline-none resize-none"></textarea>
         </div>
     </div>
 
     <script>
         const correctHash = "736963664b49ebe36459910f2c9171204f4914610a6c9ab6b19bc6df11bcd0c2";
         let currentPassword = '';
+        let editorInstance = null;
         let saveTimeout = null;
 
         async function sha256(message) {
@@ -88,58 +97,81 @@
                 currentPassword = input;
                 document.getElementById('password-screen').classList.add('hidden');
                 document.getElementById('notepad').classList.remove('hidden');
-                loadNotes();
+                initEditor();
             } else {
                 msgEl.innerHTML = '<span class="text-red-400">密码错误，请重试</span>';
             }
         }
 
-        function loadNotes() {
+        function initEditor() {
             const saved = localStorage.getItem('encryptedNotepad');
-            const textarea = document.getElementById('noteText');
+            let initialMarkdown = '';
             if (saved) {
                 try {
                     const bytes = CryptoJS.AES.decrypt(saved, currentPassword);
-                    const plaintext = bytes.toString(CryptoJS.enc.Utf8);
-                    textarea.value = plaintext;
+                    initialMarkdown = bytes.toString(CryptoJS.enc.Utf8);
                 } catch (e) {}
             }
-            updatePreview();
-            textarea.addEventListener('input', () => {
-                updatePreview();
+
+            editorInstance = new toastui.Editor({
+                el: document.getElementById('editor'),
+                height: '100%',
+                initialEditType: 'wysiwyg',
+                previewStyle: 'none',
+                initialValue: initialMarkdown,
+                usageStatistics: false,
+                toolbarItems: [
+                    ['heading', 'bold', 'italic', 'strike'],
+                    ['hr', 'quote', 'ul', 'ol'],
+                    ['table', 'link']
+                ]
+            });
+
+            // 实时自动保存（Markdown 源码）
+            editorInstance.on('change', () => {
                 autoSave();
             });
-        }
-
-        function updatePreview() {
-            const markdown = document.getElementById('noteText').value;
-            const previewEl = document.getElementById('preview');
-            previewEl.innerHTML = marked.parse(markdown);
         }
 
         function autoSave() {
             clearTimeout(saveTimeout);
             saveTimeout = setTimeout(() => {
-                const textarea = document.getElementById('noteText');
-                const encrypted = CryptoJS.AES.encrypt(textarea.value, currentPassword).toString();
+                if (!editorInstance) return;
+                const markdown = editorInstance.getMarkdown();
+                const encrypted = CryptoJS.AES.encrypt(markdown, currentPassword).toString();
                 localStorage.setItem('encryptedNotepad', encrypted);
                 const status = document.getElementById('status');
                 status.innerHTML = `✅ 已自动加密保存`;
                 setTimeout(() => {
                     status.innerHTML = `<span class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span> 已自动加密保存`;
-                }, 2000);
-            }, 800);
+                }, 1800);
+            }, 600);
+        }
+
+        // 打开浮动源码窗口
+        function toggleSourceModal() {
+            if (!editorInstance) return;
+            const markdown = editorInstance.getMarkdown();
+            document.getElementById('source-textarea').value = markdown;
+            document.getElementById('source-modal').classList.remove('hidden');
+        }
+
+        function closeSourceModal() {
+            document.getElementById('source-modal').classList.add('hidden');
+        }
+
+        function saveSourceModal() {
+            if (!editorInstance) return;
+            const newMarkdown = document.getElementById('source-textarea').value;
+            editorInstance.setMarkdown(newMarkdown);
+            closeSourceModal();
+            autoSave(); // 立即保存
         }
 
         // 回车确认密码
         document.getElementById('passInput').addEventListener('keypress', e => {
             if (e.key === 'Enter') checkPassword();
         });
-
-        // Tailwind 初始化
-        function initTailwind() {
-            return;
-        }
     </script>
 </body>
 </html>
