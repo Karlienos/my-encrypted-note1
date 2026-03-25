@@ -4,34 +4,73 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>加密记事本</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/14.1.4/marked.min.js"></script>
     <style>
-        body { font-family: system-ui; text-align: center; padding: 20px; background: #f0f0f0; margin: 0; }
-        #password-screen { max-width: 400px; margin: 100px auto; padding: 30px; background: white; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
-        input { width: 100%; padding: 15px; font-size: 18px; margin: 15px 0; border: 2px solid #ddd; border-radius: 8px; }
-        button { padding: 12px 30px; font-size: 18px; background: #0066cc; color: white; border: none; border-radius: 8px; cursor: pointer; }
-        #notepad { display: none; max-width: 900px; margin: 0 auto; }
-        textarea { width: 100%; height: 70vh; font-size: 18px; padding: 20px; border: 2px solid #ddd; border-radius: 12px; resize: vertical; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        .status { color: #28a745; margin-top: 10px; font-size: 14px; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+        body { font-family: 'Inter', system-ui, sans-serif; }
+        .markdown-preview { line-height: 1.7; }
+        .markdown-preview h1, .markdown-preview h2 { border-bottom: 1px solid #374151; padding-bottom: 0.3em; }
     </style>
 </head>
-<body>
-    <div id="password-screen">
-        <h2>请输入访问密码</h2>
-        <input type="password" id="passInput" placeholder="输入密码" autocomplete="off">
-        <button onclick="checkPassword()">确认</button>
-        <p id="msg"></p>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen">
+    <!-- 密码屏 -->
+    <div id="password-screen" class="min-h-screen flex items-center justify-center">
+        <div class="max-w-md w-full mx-4 bg-zinc-900 rounded-3xl shadow-2xl p-10">
+            <div class="flex justify-center mb-6">
+                <div class="w-16 h-16 bg-emerald-500 rounded-2xl flex items-center justify-center text-3xl">🔐</div>
+            </div>
+            <h1 class="text-3xl font-semibold text-center mb-2">加密记事本</h1>
+            <p class="text-zinc-400 text-center mb-8">输入密码后开始安全记录</p>
+            <input type="password" id="passInput" 
+                   class="w-full bg-zinc-800 border border-zinc-700 focus:border-emerald-500 rounded-2xl px-6 py-4 text-lg outline-none transition-all"
+                   placeholder="输入密码 Karlienos" autocomplete="off">
+            <button onclick="checkPassword()" 
+                    class="mt-6 w-full bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-4 rounded-2xl text-lg transition-all">
+                进入记事本
+            </button>
+            <p id="msg" class="text-center mt-4 text-sm"></p>
+        </div>
     </div>
 
-    <div id="notepad">
-        <h2 class="success">✅ 验证通过！加密记事本</h2>
-        <textarea id="noteText" placeholder="在这里输入笔记... 内容会自动加密保存"></textarea>
-        <div class="status" id="status">已就绪（自动保存中）</div>
+    <!-- 记事本主界面 -->
+    <div id="notepad" class="hidden min-h-screen flex flex-col">
+        <div class="bg-zinc-900 border-b border-zinc-800 px-6 py-4 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 bg-emerald-500 rounded-2xl flex items-center justify-center text-xl">📝</div>
+                <h2 class="text-2xl font-semibold">我的加密笔记</h2>
+            </div>
+            <div id="status" class="text-emerald-400 text-sm flex items-center gap-2">
+                <span class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>
+                已自动加密保存
+            </div>
+        </div>
+        
+        <div class="flex flex-1 overflow-hidden">
+            <!-- 编辑区 -->
+            <div class="flex-1 flex flex-col border-r border-zinc-800">
+                <div class="px-6 py-3 bg-zinc-900 border-b border-zinc-800 text-zinc-400 text-sm font-medium flex items-center">
+                    <span>Markdown 编辑</span>
+                    <span class="ml-auto text-xs bg-zinc-800 px-3 py-1 rounded-xl">所见即所得预览</span>
+                </div>
+                <textarea id="noteText" 
+                          class="flex-1 bg-zinc-950 p-6 text-lg resize-none outline-none font-light leading-relaxed"
+                          placeholder="在这里用 Markdown 写笔记...&#10;支持 # 标题、**加粗**、- 列表、[链接](url) 等"></textarea>
+            </div>
+            
+            <!-- 实时预览区 -->
+            <div class="flex-1 flex flex-col bg-zinc-900 overflow-auto">
+                <div class="px-6 py-3 bg-zinc-900 border-b border-zinc-800 text-zinc-400 text-sm font-medium">实时预览</div>
+                <div id="preview" class="markdown-preview flex-1 p-8 prose prose-invert max-w-none overflow-auto"></div>
+            </div>
+        </div>
     </div>
 
     <script>
-        // 密码的 SHA-256 哈希（Karlienos）
         const correctHash = "736963664b49ebe36459910f2c9171204f4914610a6c9ab6b19bc6df11bcd0c2";
+        let currentPassword = '';
+        let saveTimeout = null;
 
         async function sha256(message) {
             const msgBuffer = new TextEncoder().encode(message);
@@ -39,23 +78,19 @@
             return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
         }
 
-        let currentPassword = '';
-        let saveTimeout = null;
-
         async function checkPassword() {
             const input = document.getElementById('passInput').value.trim();
             const msgEl = document.getElementById('msg');
-            if (!input) { msgEl.textContent = '请输入密码'; msgEl.style.color = 'red'; return; }
+            if (!input) { msgEl.innerHTML = '<span class="text-red-400">请输入密码</span>'; return; }
             
             const inputHash = await sha256(input);
             if (inputHash === correctHash) {
                 currentPassword = input;
-                document.getElementById('password-screen').style.display = 'none';
-                document.getElementById('notepad').style.display = 'block';
+                document.getElementById('password-screen').classList.add('hidden');
+                document.getElementById('notepad').classList.remove('hidden');
                 loadNotes();
             } else {
-                msgEl.textContent = '密码错误，请重试';
-                msgEl.style.color = 'red';
+                msgEl.innerHTML = '<span class="text-red-400">密码错误，请重试</span>';
             }
         }
 
@@ -67,12 +102,19 @@
                     const bytes = CryptoJS.AES.decrypt(saved, currentPassword);
                     const plaintext = bytes.toString(CryptoJS.enc.Utf8);
                     textarea.value = plaintext;
-                } catch (e) {
-                    textarea.value = '解密失败，请确认密码正确';
-                }
+                } catch (e) {}
             }
-            // 自动保存监听
-            textarea.addEventListener('input', autoSave);
+            updatePreview();
+            textarea.addEventListener('input', () => {
+                updatePreview();
+                autoSave();
+            });
+        }
+
+        function updatePreview() {
+            const markdown = document.getElementById('noteText').value;
+            const previewEl = document.getElementById('preview');
+            previewEl.innerHTML = marked.parse(markdown);
         }
 
         function autoSave() {
@@ -81,17 +123,23 @@
                 const textarea = document.getElementById('noteText');
                 const encrypted = CryptoJS.AES.encrypt(textarea.value, currentPassword).toString();
                 localStorage.setItem('encryptedNotepad', encrypted);
-                document.getElementById('status').textContent = '✅ 已自动加密保存';
+                const status = document.getElementById('status');
+                status.innerHTML = `✅ 已自动加密保存`;
                 setTimeout(() => {
-                    document.getElementById('status').textContent = '已就绪（自动保存中）';
+                    status.innerHTML = `<span class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span> 已自动加密保存`;
                 }, 2000);
-            }, 500);
+            }, 800);
         }
 
-        // 回车键确认密码
-        document.getElementById('passInput').addEventListener('keypress', function(e) {
+        // 回车确认密码
+        document.getElementById('passInput').addEventListener('keypress', e => {
             if (e.key === 'Enter') checkPassword();
         });
+
+        // Tailwind 初始化
+        function initTailwind() {
+            return;
+        }
     </script>
 </body>
 </html>
